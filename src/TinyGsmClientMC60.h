@@ -43,6 +43,11 @@
 #include "TinyGsmSMS.tpp"
 #include "TinyGsmTime.tpp"
 #include "TinyGsmBattery.tpp"
+#include "TinyGSMAudio.tpp"
+#include "TinyGSMAudio.tpp"
+#include "TinyGsmGPS.tpp"
+#include "TinyGsmBluetooth.tpp"
+#include "TinyGsmNTP.tpp"
 
 enum MC60RegStatus {
   REG_NO_RESULT    = -1,
@@ -60,7 +65,11 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
                     public TinyGsmCalling<TinyGsmMC60>,
                     public TinyGsmSMS<TinyGsmMC60>,
                     public TinyGsmTime<TinyGsmMC60>,
-                    public TinyGsmBattery<TinyGsmMC60> {
+                    public TinyGsmBattery<TinyGsmMC60>,
+                    public TinyGSMAudio<TinyGsmMC60>,
+                    public TinyGsmGPS<TinyGsmMC60>,
+                    public TinyGsmBluetooth<TinyGsmMC60>,
+                    public TinyGsmNTP<TinyGsmMC60>  {
   friend class TinyGsmModem<TinyGsmMC60>;
   friend class TinyGsmGPRS<TinyGsmMC60>;
   friend class TinyGsmTCP<TinyGsmMC60, TINY_GSM_MUX_COUNT>;
@@ -68,7 +77,10 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
   friend class TinyGsmSMS<TinyGsmMC60>;
   friend class TinyGsmTime<TinyGsmMC60>;
   friend class TinyGsmBattery<TinyGsmMC60>;
-
+  friend class TinyGSMAudio<TinyGsmMC60>;
+  friend class TinyGsmGPS<TinyGsmMC60>;
+  friend class TinyGsmBluetooth<TinyGsmMC60>;
+  friend class TinyGsmNTP<TinyGsmMC60>;
   /*
    * Inner Client
    */
@@ -79,7 +91,7 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
    public:
     GsmClientMC60() {}
 
-    explicit GsmClientMC60(TinyGsmMC60& modem, uint8_t mux = 0) {
+    explicit GsmClientMC60(TinyGsmMC60& modem, uint8_t mux = 0) { //mux=multiplexing
       init(&modem, mux);
     }
 
@@ -125,7 +137,7 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
      */
 
     String remoteIP() TINY_GSM_ATTR_NOT_IMPLEMENTED;
-  };
+  }; //end of GsmClientMC60
 
   /*
    * Inner Secure Client
@@ -133,7 +145,7 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
   // NOT SUPPORTED
 
   /*
-   * Constructor
+   * Constructor of outer class
    */
  public:
   explicit TinyGsmMC60(Stream& stream) : stream(stream) {
@@ -351,7 +363,7 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
   /*
    * Audio functions
    */
-  // No functions of this type supported
+  // Follows all audio functions as inherited from TinyGsmAudio.tpp
 
   /*
    * Text messaging (SMS) functions
@@ -376,7 +388,85 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
   /*
    * GPS/GNSS/GLONASS location functions
    */
-  // No functions of this type supported
+
+protected:
+  // Enable GNSS
+  bool enableGPSImpl() {
+    sendAT("+QGNSSC=1");  // Power on GNSS
+    return waitResponse(GF("OK")) == 1;
+  }
+
+  // Disable GNSS
+  bool disableGPSImpl() {
+    sendAT("+QGNSSC=0");  // Power off GNSS
+    return waitResponse(GF("OK")) == 1;
+  }
+
+  // Get RAW GNSS NMEA sentence
+  String getGPSrawImpl() {
+    sendAT("+QGNSSRD?");
+    String res;
+    if (waitResponse(15000L, res, GF("OK")) != 1) return "";
+    DBG("Raw GNSS Data:", res);  // Debug output
+
+    res.trim();
+    return res;
+  }
+
+  // Get RMC (Recommended Minimum GNSS Data) information
+  String getGPSRMCImpl() {
+    sendAT("+QGNSSRD=\"NMEA/RMC\"");
+    String res;
+    if (waitResponse(5000, res, GF("OK")) != 1) return "";
+    res.trim();
+    return res;
+  }
+
+  // Get GSA (GNSS Satellite Data) information
+  String getGPSGSAImpl() {
+    sendAT("+QGNSSRD=\"NMEA/GSA\"");
+    String res;
+    if (waitResponse(5000, res, GF("OK")) != 1) return "";
+    res.trim();
+    return res;
+  }
+
+bool getGPSImpl(float* lat, float* lon, float* speed = nullptr, float* alt = nullptr,
+                int* vsat = nullptr, int* usat = nullptr, float* accuracy = nullptr,
+                int* year = nullptr, int* month = nullptr, int* day = nullptr,
+                int* hour = nullptr, int* minute = nullptr, int* second = nullptr)
+ {
+
+    sendAT("+QGNSSRD=\"NMEA/RMC\"");
+    String gpsData;
+    if (waitResponse(5000, gpsData, GF("OK")) != 1) return false;
+
+    if (gpsData.length() == 0) return false;  // Fixed `isEmpty()` issue
+
+    float ilat, ilon, ispeed, ialt;
+    int iyear, imonth, iday, ihour, imin, isecond;
+
+    // Parsing GPS data (adjust format if needed)
+    if (sscanf(gpsData.c_str(), "%f,%f,%f,%f,%d,%d,%d,%d,%d,%d", 
+               &ilat, &ilon, &ispeed, &ialt, &iyear, &imonth, &iday, &ihour, &imin, &isecond) == 10) {
+
+      if (lat) *lat = ilat;
+      if (lon) *lon = ilon;
+      if (speed) *speed = ispeed;
+      if (alt) *alt = ialt;
+      if (year) *year = iyear;
+      if (month) *month = imonth;
+      if (day) *day = iday;
+      if (hour) *hour = ihour;
+      if (minute) *minute = imin;
+      if (second) *second = isecond;
+
+      return true;
+    }
+
+    return false;
+  }
+
 
   /*
    * Time functions
@@ -386,22 +476,58 @@ class TinyGsmMC60 : public TinyGsmModem<TinyGsmMC60>,
   /*
    * NTP server functions
    */
-  // No functions of this type supported
+
+public:
+  byte NTPServerSyncImpl(String server = "pool.ntp.org", int port = 123) {
+    // Set the NTP server and port
+    sendAT(GF("+QNTP=\""), server, "\",", String(port));
+    if (waitResponse(120000L) != 1) return -1;
+
+    // Execute NTP sync request
+    sendAT(GF("+QNTP"));
+    if (waitResponse(120000L, GF("+QNTP:"))) {
+      String result = stream.readStringUntil('\n');
+      result.trim();
+      if (TinyGsmIsValidNumber(result)) return result.toInt();
+    }
+    return -1;
+  }
+
+  String getNTPServerImpl() {
+    sendAT(GF("+QNTP?"));
+    if (waitResponse(10000L, GF("+QNTP:")) != 1) return "";
+    String res = stream.readStringUntil('\n');
+    res.trim();
+    return res;
+  }
 
   /*
    * BLE functions
    */
-  // No functions of this type supported
+// Enable Bluetooth
 
-  /*
-   * NTP server functions
-   */
-  // No functions of this type supported
+bool TinyGsmMC60::enableBluetoothImpl() {
+  sendAT(GF("+QBTPWR=1")); 
+  return waitResponse() == 1;
+}
 
-  /*
-   * BLE functions
-   */
-  // No functions of this type supported
+// Disable Bluetooth
+bool TinyGsmMC60::disableBluetoothImpl() {
+  sendAT(GF("+QBTPWER=0"));
+  return waitResponse() == 1;
+}
+
+// Set Bluetooth visibility
+bool TinyGsmMC60::setBluetoothVisibilityImpl(bool visible) {
+  sendAT(GF("+QBTVISB="), visible ? 1 : 0);
+  return waitResponse() == 1;
+}
+
+// Set Bluetooth host name
+bool TinyGsmMC60::setBluetoothHostNameImpl(const char* name) {
+  sendAT(GF("+QBTNAME="), name);
+  return waitResponse() == 1;
+}
 
   /*
    * Battery functions
