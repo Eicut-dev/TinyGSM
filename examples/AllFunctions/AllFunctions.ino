@@ -46,7 +46,7 @@
 #define __AVR_ATmega328P__
 
 #ifndef __AVR_ATmega328P__
-//#define SerialAT Serial1
+#define SerialAT Serial1
 
 // or Software Serial on Uno, Nano
 #else
@@ -99,11 +99,11 @@
 #define GSM_PIN ""
 
 // Set phone numbers, if you want to test SMS and Calls
- #define SMS_TARGET  "09125972430"
- #define CALL_TARGET "09125972430"
+ #define SMS_TARGET  ""
+ #define CALL_TARGET ""
 
 // Your GPRS credentials, if any
-const char apn[] = "mcinet";
+const char apn[] = "";
 // const char apn[] = "ibasis.iot";
 const char gprsUser[] = "";
 const char gprsPass[] = "";
